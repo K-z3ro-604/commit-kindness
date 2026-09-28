@@ -10,3 +10,5 @@
 <!-- LOVABLE:END -->
 
 - Keep export preview and browser print output at A4 with zero browser margins; use minimum page height so long text flows without vertical compression.
+
+- Render export content as explicit, measured A4 page components; this keeps preview, PDF, and browser print pagination identical.
