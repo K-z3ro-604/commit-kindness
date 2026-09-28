@@ -288,7 +288,7 @@ function ExportPage() {
           html2canvas: { scale: 2, useCORS: true },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" as const },
           pagebreak: { mode: ["css", "legacy"], avoid: [".a4-page-content", "p", "h1", "h2", "svg"] },
-        };
+        } as unknown as Parameters<(ReturnType<typeof html2pdf>)["set"]>[0];
       await html2pdf()
         .set(pdfOptions)
         .from(clone)
