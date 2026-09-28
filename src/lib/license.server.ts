@@ -1,5 +1,6 @@
 import { useSession } from "@tanstack/react-start/server";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type LicenseSession = { codeId?: string };
 type AdminSession = { admin?: boolean };
@@ -22,9 +23,9 @@ export function safeEqual(a: string, b: string) {
   return timingSafeEqual(x, y);
 }
 
-export async function db() {
+export async function db(): Promise<SupabaseClient<any>> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  return supabaseAdmin;
+  return supabaseAdmin as unknown as SupabaseClient<any>;
 }
 
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
