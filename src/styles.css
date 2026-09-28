@@ -199,15 +199,38 @@
     transform: none !important;
   }
 
+  .a4-page-stage {
+    height: auto !important;
+  }
+
+  .a4-pages {
+    display: block !important;
+    gap: 0 !important;
+  }
+
   .a4-print-page {
     position: relative !important;
     width: 210mm !important;
     min-height: 297mm !important;
-    height: auto !important;
+    height: 297mm !important;
     margin: 0 !important;
+    overflow: hidden !important;
     box-shadow: none !important;
+    break-inside: avoid-page !important;
+    page-break-inside: avoid !important;
     break-after: page;
     page-break-after: always;
+  }
+
+  .a4-print-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .a4-page-content,
+  .a4-page-content > * {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
 
   .a4-print-page .book-ornate-frame {

@@ -50,8 +50,135 @@ const FRAMES: Array<{ label: string; value: BookFrameStyle }> = [
 ];
 
 const A4_W = 794; // px @96dpi
+const A4_H = 1123;
 const MM = 3.7795; // px per mm
 const PAGE_PX_TO_PT = 0.75;
+const PREVIEW_GAP = 24;
+
+type PageItem =
+  | { kind: "title" | "chapter" | "paragraph" | "footnote"; text: string; continued?: boolean }
+  | { kind: "ornament" | "footnote-rule" };
+
+type BookPage = { items: PageItem[] };
+
+function paginateBook(
+  book: ReturnType<typeof parseDocument> & { title: string; chapter: string },
+  options: { font: string; pxSize: number; lineHeight: number; padding: number },
+): BookPage[] {
+  const { font, pxSize, lineHeight, padding } = options;
+  const measureRoot = document.createElement("div");
+  const contentWidth = A4_W - padding * 2;
+  const footerReserve = Math.max(34, pxSize * 2.1);
+  const pageCapacity = A4_H - padding * 2 - footerReserve;
+  measureRoot.dir = "rtl";
+  measureRoot.style.cssText = [
+    "position:fixed",
+    "visibility:hidden",
+    "pointer-events:none",
+    "inset-inline-start:-10000px",
+    `width:${contentWidth}px`,
+    `font-family:'${font}','Amiri',serif`,
+    `font-size:${pxSize}px`,
+    `line-height:${lineHeight}`,
+  ].join(";");
+  document.body.appendChild(measureRoot);
+
+  const measure = (item: PageItem) => {
+    if (item.kind === "ornament") return 14 + pxSize * 0.5;
+    if (item.kind === "footnote-rule") return pxSize * 1.2 + 14 + pxSize * 0.4;
+    const node = document.createElement(item.kind === "title" || item.kind === "chapter" ? `h${item.kind === "title" ? 1 : 2}` : "p");
+    node.textContent = item.text;
+    node.style.cssText = "margin:0;width:100%;box-sizing:border-box;overflow-wrap:anywhere;";
+    if (item.kind === "title") {
+      node.style.fontSize = `${pxSize * 1.9}px`;
+      node.style.fontWeight = "700";
+      node.style.textAlign = "center";
+      node.style.lineHeight = "1.4";
+    } else if (item.kind === "chapter") {
+      node.style.fontSize = `${pxSize * 1.25}px`;
+      node.style.fontWeight = "700";
+      node.style.textAlign = "center";
+      node.style.lineHeight = "1.5";
+    } else if (item.kind === "paragraph") {
+      node.style.textAlign = "justify";
+      node.style.textIndent = item.continued ? "0" : "1.5em";
+    } else {
+      node.style.fontSize = `${pxSize * 0.78}px`;
+      node.style.lineHeight = "1.7";
+      node.style.textAlign = "justify";
+    }
+    measureRoot.appendChild(node);
+    const marginBottom = item.kind === "title"
+      ? pxSize * 0.3
+      : item.kind === "chapter"
+        ? pxSize * 1.2
+        : item.kind === "paragraph"
+          ? pxSize * 0.6
+          : 2;
+    const height = node.getBoundingClientRect().height + marginBottom;
+    node.remove();
+    return height;
+  };
+
+  const pages: BookPage[] = [{ items: [] }];
+  let used = 0;
+  const newPage = () => {
+    pages.push({ items: [] });
+    used = 0;
+  };
+  const addFixed = (item: PageItem) => {
+    const height = measure(item);
+    if (used > 0 && used + height > pageCapacity - 1) newPage();
+    pages[pages.length - 1]?.items.push(item);
+    used += height;
+  };
+
+  const addFlowingText = (kind: "paragraph" | "footnote", text: string) => {
+    let words = text.trim().split(/\s+/).filter(Boolean);
+    let continued = false;
+    while (words.length > 0) {
+      const available = pageCapacity - used - 1;
+      let low = 1;
+      let high = words.length;
+      let fit = 0;
+      while (low <= high) {
+        const mid = Math.floor((low + high) / 2);
+        const candidate: PageItem = { kind, text: words.slice(0, mid).join(" "), continued };
+        if (measure(candidate) <= available) {
+          fit = mid;
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
+      if (fit === 0 && used > 0) {
+        newPage();
+        continue;
+      }
+      if (fit === 0) fit = 1;
+      const item: PageItem = { kind, text: words.slice(0, fit).join(" "), continued };
+      pages[pages.length - 1]?.items.push(item);
+      used += measure(item);
+      words = words.slice(fit);
+      continued = true;
+      if (words.length > 0) newPage();
+    }
+  };
+
+  addFixed({ kind: "title", text: book.title });
+  addFixed({ kind: "ornament" });
+  addFixed({ kind: "chapter", text: book.chapter });
+  book.paragraphs.forEach((paragraph) => addFlowingText("paragraph", paragraph));
+  if (book.footnotes.length > 0) {
+    const ruleHeight = measure({ kind: "footnote-rule" });
+    const firstLineHeight = pxSize * 0.78 * 1.7 + 2;
+    if (used > 0 && used + ruleHeight + firstLineHeight > pageCapacity - 1) newPage();
+    addFixed({ kind: "footnote-rule" });
+    book.footnotes.forEach((footnote) => addFlowingText("footnote", footnote));
+  }
+  measureRoot.remove();
+  return pages;
+}
 
 // html2canvas can't parse oklch(): temporarily replace theme variables with rgb equivalents
 function flattenOklchVars() {
@@ -86,8 +213,9 @@ function ExportPage() {
   const [text, setText] = useState(SAMPLE_TEXT);
   const [busy, setBusy] = useState<"pdf" | "docx" | null>(null);
   const [scale, setScale] = useState(1);
+  const [pages, setPages] = useState<BookPage[]>([{ items: [] }]);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const pageRef = useRef<HTMLDivElement>(null);
+  const pagesRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const saved = loadDocument();
@@ -97,6 +225,7 @@ function ExportPage() {
   const BOOK = useMemo(() => ({ title, chapter, ...parseDocument(text) }), [title, chapter, text]);
   const slugName = (ext: string) => `${(title || "كتاب").replace(/\s+/g, "-")}.${ext}`;
   const padding = Math.max(margin * MM, 72);
+  const pxSize = size / PAGE_PX_TO_PT;
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -108,16 +237,26 @@ function ExportPage() {
     return () => ro.disconnect();
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    document.fonts.ready.then(() => {
+      if (!cancelled) setPages(paginateBook(BOOK, { font, pxSize, lineHeight, padding }));
+    });
+    return () => { cancelled = true; };
+  }, [BOOK, font, pxSize, lineHeight, padding]);
+
   const exportPdf = async () => {
-    if (!pageRef.current) return;
+    if (!pagesRef.current) return;
     setBusy("pdf");
     try {
       const html2pdf = (await import("html2pdf.js")).default;
       await document.fonts.ready;
-      const clone = pageRef.current.cloneNode(true) as HTMLElement;
+      const clone = pagesRef.current.cloneNode(true) as HTMLElement;
       clone.style.width = `${A4_W}px`;
-      clone.style.minHeight = "1123px";
+      clone.style.minHeight = `${A4_H}px`;
       clone.style.height = "auto";
+      clone.style.display = "block";
+      clone.style.gap = "0";
       // html2canvas can't parse oklch theme colors — use plain print colors
       [clone, ...Array.from(clone.querySelectorAll<HTMLElement>("*"))].forEach((el) => {
         const muted = el.classList.contains("text-muted-foreground");
@@ -145,6 +284,7 @@ function ExportPage() {
           image: { type: "jpeg", quality: 0.98 },
           html2canvas: { scale: 2, useCORS: true },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+          pagebreak: { mode: ["css", "legacy"], avoid: [".a4-page-content", "p", "h1", "h2", "svg"] },
         })
         .from(clone)
         .save();
@@ -218,8 +358,6 @@ function ExportPage() {
       setBusy(null);
     }
   };
-
-  const pxSize = size / PAGE_PX_TO_PT;
 
   return (
     <div className="export-workspace mx-auto w-full max-w-7xl px-5 pb-12 pt-2 lg:px-10 lg:pt-10">
@@ -297,55 +435,78 @@ function ExportPage() {
         <section className="print-preview min-w-0 overflow-hidden rounded-3xl bg-muted p-4 md:p-8">
           <p className="mb-4 text-center text-xs font-bold text-muted-foreground">معاينة الطباعة · A4</p>
           <div ref={wrapRef} className="mx-auto w-full max-w-[794px]">
-            <div style={{ height: 1123 * scale, overflow: "hidden" }}>
-              <div style={{ width: A4_W, transform: `scale(${scale})`, transformOrigin: "top right" }}>
-                <div
-                  ref={pageRef}
-                  dir="rtl"
-                   className="a4-print-page bg-card text-card-foreground shadow-card"
-                  style={{
-                    position: "relative",
-                    display: "flex",
-                    flexDirection: "column",
-                    width: A4_W,
-                    minHeight: 1123,
-                    padding,
-                    fontFamily: `'${font}', 'Amiri', serif`,
-                    fontSize: pxSize,
-                    lineHeight,
-                    boxSizing: "border-box",
-                  }}
-                >
-                  <BookFrame width={A4_W} height={1123} variant={frameStyle} />
-                  <h1 style={{ fontSize: pxSize * 1.9, fontWeight: 700, textAlign: "center", lineHeight: 1.4, marginBottom: pxSize * 0.3 }}>
-                    {BOOK.title}
-                  </h1>
-                  <div style={{ marginBottom: pxSize * 0.5 }}><HeadingOrnament /></div>
-                  <h2 style={{ fontSize: pxSize * 1.25, fontWeight: 700, textAlign: "center", lineHeight: 1.5, marginBottom: pxSize * 1.2 }}>
-                    {BOOK.chapter}
-                  </h2>
-                  {BOOK.paragraphs.map((p, i) => (
-                    <p key={i} style={{ textAlign: "justify", textIndent: "1.5em", marginBottom: pxSize * 0.6 }}>{p}</p>
-                  ))}
-                  <div style={{ marginTop: "auto" }}>
-                    {BOOK.footnotes.length > 0 && (
-                      <div style={{ paddingTop: pxSize * 1.2 }}>
-                        <FootnoteRule />
-                        <div style={{ marginTop: pxSize * 0.4, fontSize: pxSize * 0.78, lineHeight: 1.7 }}>
-                          {BOOK.footnotes.map((f, i) => (
-                            <p key={i} style={{ textAlign: "justify", marginBottom: 2 }}>{f}</p>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    <p className="text-muted-foreground" style={{ textAlign: "center", marginTop: pxSize, fontSize: pxSize * 0.8 }}>﴿ ١ ﴾</p>
-                  </div>
-                </div>
+            <div className="a4-page-stage" style={{ height: (pages.length * A4_H + Math.max(0, pages.length - 1) * PREVIEW_GAP) * scale }}>
+              <div
+                ref={pagesRef}
+                className="a4-pages"
+                style={{ width: A4_W, display: "flex", flexDirection: "column", gap: PREVIEW_GAP, transform: `scale(${scale})`, transformOrigin: "top right" }}
+              >
+                {pages.map((page, pageIndex) => (
+                  <A4Page
+                    key={pageIndex}
+                    page={page}
+                    pageNumber={pageIndex + 1}
+                    padding={padding}
+                    font={font}
+                    pxSize={pxSize}
+                    lineHeight={lineHeight}
+                    frameStyle={frameStyle}
+                  />
+                ))}
               </div>
             </div>
           </div>
         </section>
       </div>
+    </div>
+  );
+}
+
+function A4Page({ page, pageNumber, padding, font, pxSize, lineHeight, frameStyle }: {
+  page: BookPage;
+  pageNumber: number;
+  padding: number;
+  font: string;
+  pxSize: number;
+  lineHeight: number;
+  frameStyle: BookFrameStyle;
+}) {
+  return (
+    <div
+      dir="rtl"
+      className="a4-print-page bg-card text-card-foreground shadow-card"
+      style={{
+        position: "relative",
+        display: "flex",
+        flexDirection: "column",
+        width: A4_W,
+        height: A4_H,
+        padding,
+        fontFamily: `'${font}', 'Amiri', serif`,
+        fontSize: pxSize,
+        lineHeight,
+        boxSizing: "border-box",
+        overflow: "hidden",
+        breakInside: "avoid",
+        pageBreakInside: "avoid",
+        breakAfter: "page",
+        pageBreakAfter: "always",
+      }}
+    >
+      <BookFrame width={A4_W} height={A4_H} variant={frameStyle} />
+      <div className="a4-page-content" style={{ position: "relative", zIndex: 1 }}>
+        {page.items.map((item, itemIndex) => {
+          if (item.kind === "ornament") return <div key={itemIndex} style={{ height: 14, marginBottom: pxSize * 0.5 }}><HeadingOrnament /></div>;
+          if (item.kind === "footnote-rule") return <div key={itemIndex} style={{ paddingTop: pxSize * 1.2, marginBottom: pxSize * 0.4 }}><FootnoteRule /></div>;
+          if (item.kind === "title") return <h1 key={itemIndex} style={{ fontSize: pxSize * 1.9, fontWeight: 700, textAlign: "center", lineHeight: 1.4, margin: 0, marginBottom: pxSize * 0.3, breakInside: "avoid" }}>{item.text}</h1>;
+          if (item.kind === "chapter") return <h2 key={itemIndex} style={{ fontSize: pxSize * 1.25, fontWeight: 700, textAlign: "center", lineHeight: 1.5, margin: 0, marginBottom: pxSize * 1.2, breakInside: "avoid" }}>{item.text}</h2>;
+          if (item.kind === "footnote") return <p key={itemIndex} style={{ fontSize: pxSize * 0.78, lineHeight: 1.7, textAlign: "justify", margin: 0, marginBottom: 2, overflowWrap: "anywhere", breakInside: "avoid" }}>{item.text}</p>;
+          return <p key={itemIndex} style={{ textAlign: "justify", textIndent: item.continued ? 0 : "1.5em", margin: 0, marginBottom: pxSize * 0.6, overflowWrap: "anywhere", breakInside: "avoid" }}>{item.text}</p>;
+        })}
+      </div>
+      <p className="text-muted-foreground" style={{ position: "absolute", zIndex: 1, insetInline: padding, bottom: padding * 0.45, textAlign: "center", margin: 0, fontSize: pxSize * 0.8 }}>
+        ﴿ {pageNumber.toLocaleString("ar-EG")} ﴾
+      </p>
     </div>
   );
 }
