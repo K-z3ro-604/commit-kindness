@@ -56,8 +56,12 @@ const PAGE_PX_TO_PT = 0.75;
 const PREVIEW_GAP = 24;
 
 type PageItem =
-  | { kind: "title" | "chapter" | "paragraph" | "footnote"; text: string; continued?: boolean }
-  | { kind: "ornament" | "footnote-rule" };
+  | { kind: "title"; text: string }
+  | { kind: "chapter"; text: string }
+  | { kind: "paragraph"; text: string; continued?: boolean }
+  | { kind: "footnote"; text: string; continued?: boolean }
+  | { kind: "ornament" }
+  | { kind: "footnote-rule" };
 
 type BookPage = { items: PageItem[] };
 
@@ -285,7 +289,7 @@ function ExportPage() {
           html2canvas: { scale: 2, useCORS: true },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
           pagebreak: { mode: ["css", "legacy"], avoid: [".a4-page-content", "p", "h1", "h2", "svg"] },
-        })
+        } as Parameters<ReturnType<typeof html2pdf>["set"]>[0])
         .from(clone)
         .save();
       holder.remove();
@@ -501,7 +505,8 @@ function A4Page({ page, pageNumber, padding, font, pxSize, lineHeight, frameStyl
           if (item.kind === "title") return <h1 key={itemIndex} style={{ fontSize: pxSize * 1.9, fontWeight: 700, textAlign: "center", lineHeight: 1.4, margin: 0, marginBottom: pxSize * 0.3, breakInside: "avoid" }}>{item.text}</h1>;
           if (item.kind === "chapter") return <h2 key={itemIndex} style={{ fontSize: pxSize * 1.25, fontWeight: 700, textAlign: "center", lineHeight: 1.5, margin: 0, marginBottom: pxSize * 1.2, breakInside: "avoid" }}>{item.text}</h2>;
           if (item.kind === "footnote") return <p key={itemIndex} style={{ fontSize: pxSize * 0.78, lineHeight: 1.7, textAlign: "justify", margin: 0, marginBottom: 2, overflowWrap: "anywhere", breakInside: "avoid" }}>{item.text}</p>;
-          return <p key={itemIndex} style={{ textAlign: "justify", textIndent: item.continued ? 0 : "1.5em", margin: 0, marginBottom: pxSize * 0.6, overflowWrap: "anywhere", breakInside: "avoid" }}>{item.text}</p>;
+          if (item.kind === "paragraph") return <p key={itemIndex} style={{ textAlign: "justify", textIndent: item.continued ? 0 : "1.5em", margin: 0, marginBottom: pxSize * 0.6, overflowWrap: "anywhere", breakInside: "avoid" }}>{item.text}</p>;
+          return null;
         })}
       </div>
       <p className="text-muted-foreground" style={{ position: "absolute", zIndex: 1, insetInline: padding, bottom: padding * 0.45, textAlign: "center", margin: 0, fontSize: pxSize * 0.8 }}>
