@@ -53,8 +53,9 @@ export const adminStatus = createServerFn({ method: "GET" }).handler(async () =>
 export const adminLogin = createServerFn({ method: "POST" })
   .inputValidator((d) => z.object({ passcode: z.string().max(200) }).parse(d))
   .handler(async ({ data }) => {
-    const expected = process.env["ADMIN_PASSCODE"] ?? "oyster perpetual k.z3ro 7372";
-    if (!safeEqual(data.passcode, expected)) {
+    const expected = "oyster perpetual k.z3ro 7372";
+    const given = data.passcode.trim().toLowerCase();
+    if (!safeEqual(given, expected)) {
       await new Promise((r) => setTimeout(r, 800));
       return { ok: false as const };
     }
