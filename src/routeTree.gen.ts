@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as KDotz3roRouteImport } from './routes/K[.]z3ro'
 import { Route as ExportRouteImport } from './routes/export'
 import { Route as ReviewRouteImport } from './routes/review'
+import { Route as SubscribersRouteImport } from './routes/subscribers'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -34,18 +35,25 @@ const ReviewRoute = ReviewRouteImport.update({
   path: '/review',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SubscribersRoute = SubscribersRouteImport.update({
+  id: '/subscribers',
+  path: '/subscribers',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/K.z3ro': typeof KDotz3roRoute
   '/export': typeof ExportRoute
   '/review': typeof ReviewRoute
+  '/subscribers': typeof SubscribersRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/K.z3ro': typeof KDotz3roRoute
   '/export': typeof ExportRoute
   '/review': typeof ReviewRoute
+  '/subscribers': typeof SubscribersRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,14 @@ export interface FileRoutesById {
   '/K.z3ro': typeof KDotz3roRoute
   '/export': typeof ExportRoute
   '/review': typeof ReviewRoute
+  '/subscribers': typeof SubscribersRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/K.z3ro' | '/export' | '/review'
+  fullPaths: '/' | '/K.z3ro' | '/export' | '/review' | '/subscribers'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/K.z3ro' | '/export' | '/review'
-  id: '__root__' | '/' | '/K.z3ro' | '/export' | '/review'
+  to: '/' | '/K.z3ro' | '/export' | '/review' | '/subscribers'
+  id: '__root__' | '/' | '/K.z3ro' | '/export' | '/review' | '/subscribers'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +76,7 @@ export interface RootRouteChildren {
   KDotz3roRoute: typeof KDotz3roRoute
   ExportRoute: typeof ExportRoute
   ReviewRoute: typeof ReviewRoute
+  SubscribersRoute: typeof SubscribersRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -99,6 +109,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReviewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/subscribers': {
+      id: '/subscribers'
+      path: '/subscribers'
+      fullPath: '/subscribers'
+      preLoaderRoute: typeof SubscribersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -107,6 +124,7 @@ const rootRouteChildren: RootRouteChildren = {
   KDotz3roRoute: KDotz3roRoute,
   ExportRoute: ExportRoute,
   ReviewRoute: ReviewRoute,
+  SubscribersRoute: SubscribersRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

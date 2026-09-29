@@ -58,7 +58,7 @@ function GateLogin() {
         <button disabled={busy || !pass} className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-ink py-3 font-display font-extrabold text-background shadow-ink disabled:opacity-50">
           {busy ? <Loader2 className="size-5 animate-spin" /> : <ShieldCheck className="size-5" />} دخول
         </button>
-mila      </form>
+      </form>
     </div>
   );
 }
