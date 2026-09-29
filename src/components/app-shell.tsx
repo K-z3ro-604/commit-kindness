@@ -36,8 +36,8 @@ function BrandMark() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  // The private management panel renders standalone, outside the customer shell and lock.
-  if (pathname.startsWith("/K.z3ro")) return <SettingsProvider>{children}</SettingsProvider>;
+  // Private management pages render standalone, outside the customer shell and lock.
+  if (pathname.startsWith("/K.z3ro") || pathname.startsWith("/subscribers")) return <SettingsProvider>{children}</SettingsProvider>;
   return (
     <SettingsProvider>
       <Shell>{children}</Shell>
